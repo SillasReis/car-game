@@ -1,28 +1,54 @@
 import math
+import neat
+import os
 import time
 
+import neat.nn.feed_forward
 import pygame
 from pygame.locals import *
 
 from utils import scale_image, blit_rotate_center
 
 
+pygame.font.init()
+
+
 BACKGROUND = pygame.image.load("car_game/imgs/track-bg.png")
-CAR = pygame.image.load("car_game/imgs/red-car.png")
+
+TRACK = pygame.image.load(f"car_game/imgs/track-2.png")
+TRACK_MASK = pygame.mask.from_surface(TRACK)
+
+WIDTH, HEIGHT = TRACK.get_width(), TRACK.get_height()
+WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+
+CAR = scale_image(pygame.image.load("car_game/imgs/red-car.png"), 0.5)
+
+STAT_FONT = pygame.font.SysFont("comicsans", 50)
+
 FPS = 60
+
+SHOW_ALL = True
+
+GEN = 0
+
+pygame.display.set_caption("AI Playground")
 
 
 class AbstractCar:
-    def __init__(self, x, y, car_factor):
-        self.img = scale_image(self.IMG, car_factor)
-        self.max_vel = 6
+    def __init__(self, x, y):
+        self.img = self.IMG
+        self.max_vel = 10
         self.vel = 0
-        self.rotation_vel = 6
+        self.rotation_vel = 10
         self.angle = 90
         self.x, self.y = x, y
-        self.acceleration = 0.1
+        self.acceleration = 1
         self.alive = True
         self.radars_readings = {}
+        self.radars_collisions = {}
+        self.score = 0
+        self.rect = None
+        self.update_rect()
 
     def rotate(self, left=False, right=False):
         if left:
@@ -32,6 +58,10 @@ class AbstractCar:
 
     def draw(self, win):
         blit_rotate_center(win, self.img, (self.x, self.y), self.angle)
+        
+        for x, y in self.radars_collisions.values():
+            pygame.draw.line(win, (0, 255, 0, 255), self.rect.center, (x, y), 1)
+            pygame.draw.circle(win, (0, 0, 255, 255), (x, y), 3)
     
     def move_forward(self):
         self.vel = min(self.vel + self.acceleration, self.max_vel)
@@ -41,6 +71,9 @@ class AbstractCar:
         self.vel = max(self.vel - self.acceleration, -self.max_vel / 2)
         self.move()
 
+    def update_rect(self):
+        self.rect = self.img.get_rect(center=self.img.get_rect(topleft=(self.x, self.y)).center)
+
     def move(self):
         radians = math.radians(self.angle)
         vertical = math.cos(radians) * self.vel
@@ -48,6 +81,8 @@ class AbstractCar:
 
         self.y -= vertical
         self.x -= horizontal
+
+        self.update_rect()
     
     def reduce_speed(self):
         self.vel = max(self.vel - self.acceleration / 2, 0)
@@ -68,47 +103,53 @@ class PlayerCar(AbstractCar):
         self.move()
         self.alive = False
     
-    def radar(self, win, radar_angle):
-        length = 0
-        
-        rect = self.img.get_rect(center=self.img.get_rect(topleft=(self.x, self.y)).center)    
-        x = int(rect.center[0])
-        y = int(rect.center[1])
+    def radar(self):
+        for radar_angle in (-60, -30, 0, 30, 60):
+            length = 0
 
-        while not win.get_at((x, y)) == pygame.Color(255, 255, 255, 255) and length < 200:
-            length += 1
-            x = int(rect.center[0] + math.cos(math.radians(self.angle + radar_angle + 90)) * length)
-            y = int(rect.center[1] - math.sin(math.radians(self.angle + radar_angle + 90)) * length)
+            x = int(self.rect.center[0])
+            y = int(self.rect.center[1])
 
-        self.radars_readings[radar_angle] = length
+            try:
+                while not TRACK.get_at((x, y)) == pygame.Color(255, 255, 255, 255) and length < 150:
+                    length += 1
+                    x = int(self.rect.center[0] + math.cos(math.radians(self.angle + radar_angle + 90)) * length)
+                    y = int(self.rect.center[1] - math.sin(math.radians(self.angle + radar_angle + 90)) * length)
+            except IndexError:
+                pass
 
-        pygame.draw.line(win, (0, 255, 0, 255), rect.center, (x, y), 1)
-        pygame.draw.circle(win, (0, 0, 255, 255), (x, y), 3)
+            self.radars_collisions[radar_angle] = (x, y)
+
+            self.radars_readings[radar_angle] = int(
+                math.sqrt(math.pow(self.rect.center[0] - x, 2) + math.pow(self.rect.center[1] - y, 2))
+            )
 
 
-def draw(win, images, player_car):
+def draw(win, images, cars, gen):
     for img, pos in images:
         win.blit(img, pos)
     
-    player_car.draw(win)
+    for car in cars:
+        car.draw(win)
 
-    for radar_angle in (-60, -30, 0, 30, 60):
-        player_car.radar(win, radar_angle)
-    
-    print(player_car.radars_readings)
+    text = STAT_FONT.render(f"Gen: {gen}", 1, (0, 0, 0))
+    win.blit(text, (10, 10))
 
     pygame.display.update()
 
 
-def move_player(player_car):
+def move_car(player_car, genome):
     keys = pygame.key.get_pressed()
     moved = False
 
     if keys[pygame.K_a]:
         player_car.rotate(left=True)
+        genome.fitness += 2
     if keys[pygame.K_d]:
         player_car.rotate(right=True)
+        genome.fitness += 2
     if keys[pygame.K_w]:
+        genome.fitness += 4
         moved = True
         player_car.move_forward()
     if keys[pygame.K_s]:
@@ -119,41 +160,120 @@ def move_player(player_car):
         player_car.reduce_speed()
 
 
-def main(track_file: str, start_pos: tuple, car_factor: float):
-    track = pygame.image.load(f"car_game/imgs/{track_file}")
-    track_mask = pygame.mask.from_surface(track)
+def move_ai_car(player_car, genome, forward=False, backward=False, left=False, right=False):
+    moved = False
 
-    widht, height = track.get_width(), track.get_height()
-    win = pygame.display.set_mode((widht, height))
+    if left or right:
+        genome.fitness -= 1
+        player_car.rotate(left=left, right=right)
     
-    pygame.display.set_caption("AI Playground")
+    if forward:
+        genome.fitness += 5
+        moved = True
+        player_car.move_forward()
+    elif backward:
+        moved = True
+        player_car.move_backward()
+
+    if not moved:
+        player_car.reduce_speed()
+
+
+def main(genomes, config):
+    global GEN, SHOW_ALL
+    GEN += 1
+
+    # start_pos = (600, 70) # Track 1
+    start_pos = (700, 70) # Track 2
 
     run = True
     clock = pygame.time.Clock()
     images = [
         (BACKGROUND, (0, 0)),
-        (track, (0, 0))
+        (TRACK, (0, 0))
     ]
-    player_car = PlayerCar(*start_pos, car_factor)
+    
+    nets = []
+    ge = []
+    cars = []
+
+    for _, g in genomes:
+        net = neat.nn.FeedForwardNetwork.create(g, config)
+        nets.append(net)
+        cars.append(PlayerCar(*start_pos))
+        g.fitness = 0
+        ge.append(g)
 
     while run:
         clock.tick(FPS)
-
-        draw(win, images, player_car)
-
+        
         for event in  pygame.event.get():
             match event.type:
                 case pygame.QUIT:
                     run = False
-                    break
+                    pygame.quit()
+                    quit()
         
-        move_player(player_car)
+        if len(cars) == 0:
+            run = False
+            break
 
-        if player_car.collide(track_mask) != None:
-            player_car.bounce()
+        keys = pygame.key.get_pressed()
 
-    pygame.quit()
+        if keys[pygame.K_x]:
+            run = False
+            time.sleep(1)
+            break
+        if keys[pygame.K_z]:
+            SHOW_ALL = bool(abs(SHOW_ALL - 1))
+            time.sleep(1)
+
+        if SHOW_ALL:
+            draw(WIN, images, cars, GEN)
+        else:
+            best_fit_idx, _ = max(list(enumerate(ge)), key=lambda x: x[1].fitness)
+            draw(WIN, images, [cars[best_fit_idx]], GEN)
+
+        for idx, car in enumerate(cars):
+            car.radar()
+            
+            outputs = nets[idx].activate(car.radars_readings.values())
+            parsed_outputs = [output > 0.5 for output in outputs]
+
+            move_ai_car(car, ge[idx], *parsed_outputs)
+            
+            if car.vel <= 0:
+                ge[idx].fitness -= 5
+            else:
+                ge[idx].fitness += 3
+
+            if car.collide(TRACK_MASK) != None:
+                cars.pop(idx)
+                nets.pop(idx)
+                ge.pop(idx)
+
+
+def run(config_path):
+    config = neat.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        config_path
+    )
+
+    p = neat.Population(config)
+
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+
+    winner = p.run(main, 50)
+
+    print('\nBest genome:\n{!s}'.format(winner))
 
 
 if __name__ == "__main__":
-    main("track-1.png", (600, 70), 0.5)
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, "config-feedforward.txt")
+    run(config_path)
