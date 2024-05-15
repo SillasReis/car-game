@@ -6,29 +6,23 @@ from pygame.locals import *
 
 from utils import scale_image, blit_rotate_center
 
+
 BACKGROUND = pygame.image.load("car_game/imgs/track-bg.png")
-
-TRACK = pygame.image.load("car_game/imgs/track-1.png")
-TRACK_MASK = pygame.mask.from_surface(TRACK)
-
-CAR = scale_image(pygame.image.load("car_game/imgs/red-car.png"), 0.3)
-
-WIDTH, HEIGHT = TRACK.get_width(), TRACK.get_height()
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("AI Playground")
-
+CAR = pygame.image.load("car_game/imgs/red-car.png")
 FPS = 60
 
 
 class AbstractCar:
-    def __init__(self, x, y):
-        self.img = self.IMG
-        self.max_vel = 3
+    def __init__(self, x, y, car_factor):
+        self.img = scale_image(self.IMG, car_factor)
+        self.max_vel = 6
         self.vel = 0
-        self.rotation_vel = 3
+        self.rotation_vel = 6
         self.angle = 90
         self.x, self.y = x, y
         self.acceleration = 0.1
+        self.alive = True
+        self.radars_readings = {}
 
     def rotate(self, left=False, right=False):
         if left:
@@ -72,6 +66,24 @@ class PlayerCar(AbstractCar):
     def bounce(self):
         self.vel = -self.vel
         self.move()
+        self.alive = False
+    
+    def radar(self, win, radar_angle):
+        length = 0
+        
+        rect = self.img.get_rect(center=self.img.get_rect(topleft=(self.x, self.y)).center)    
+        x = int(rect.center[0])
+        y = int(rect.center[1])
+
+        while not win.get_at((x, y)) == pygame.Color(255, 255, 255, 255) and length < 200:
+            length += 1
+            x = int(rect.center[0] + math.cos(math.radians(self.angle + radar_angle + 90)) * length)
+            y = int(rect.center[1] - math.sin(math.radians(self.angle + radar_angle + 90)) * length)
+
+        self.radars_readings[radar_angle] = length
+
+        pygame.draw.line(win, (0, 255, 0, 255), rect.center, (x, y), 1)
+        pygame.draw.circle(win, (0, 0, 255, 255), (x, y), 3)
 
 
 def draw(win, images, player_car):
@@ -79,6 +91,12 @@ def draw(win, images, player_car):
         win.blit(img, pos)
     
     player_car.draw(win)
+
+    for radar_angle in (-60, -30, 0, 30, 60):
+        player_car.radar(win, radar_angle)
+    
+    print(player_car.radars_readings)
+
     pygame.display.update()
 
 
@@ -101,30 +119,41 @@ def move_player(player_car):
         player_car.reduce_speed()
 
 
-run = True
-clock = pygame.time.Clock()
-images = [
-    (BACKGROUND, (0, 0)),
-    (TRACK, (0, 0))
-]
-player_car = PlayerCar(300, 50)
+def main(track_file: str, start_pos: tuple, car_factor: float):
+    track = pygame.image.load(f"car_game/imgs/{track_file}")
+    track_mask = pygame.mask.from_surface(track)
 
-
-while run:
-    clock.tick(FPS)
-
-    draw(WIN, images, player_car)
-
-    for event in  pygame.event.get():
-        match event.type:
-            case pygame.QUIT:
-                run = False
-                break
+    widht, height = track.get_width(), track.get_height()
+    win = pygame.display.set_mode((widht, height))
     
-    move_player(player_car)
+    pygame.display.set_caption("AI Playground")
 
-    if player_car.collide(TRACK_MASK) != None:
-        player_car.bounce()
+    run = True
+    clock = pygame.time.Clock()
+    images = [
+        (BACKGROUND, (0, 0)),
+        (track, (0, 0))
+    ]
+    player_car = PlayerCar(*start_pos, car_factor)
+
+    while run:
+        clock.tick(FPS)
+
+        draw(win, images, player_car)
+
+        for event in  pygame.event.get():
+            match event.type:
+                case pygame.QUIT:
+                    run = False
+                    break
+        
+        move_player(player_car)
+
+        if player_car.collide(track_mask) != None:
+            player_car.bounce()
+
+    pygame.quit()
 
 
-pygame.quit()
+if __name__ == "__main__":
+    main("track-1.png", (600, 70), 0.5)
