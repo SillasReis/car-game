@@ -3,6 +3,8 @@ from pygame.locals import *
 
 pygame.font.init()
 
+# Variáveis globais.
+
 BACKGROUND = pygame.image.load("car_game/imgs/track-bg.png")
 
 TRACK = None

@@ -40,6 +40,7 @@ def run(network):
             break
 
 
+# Executa o jogo no modo de uso de execução da IA
 def play(track_file, car_size, start_pos, model_file):
     globals.TRACK = pygame.image.load(f"car_game/imgs/{track_file}")
     globals.TRACK_MASK = pygame.mask.from_surface(globals.TRACK)

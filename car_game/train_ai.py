@@ -58,6 +58,7 @@ def eval_genomes(genomes, config):
             break
 
 
+# Executa o jogo no modo de treinamento
 def train_ai(track_file, car_size, start_pos):
     globals.GEN = 0
     globals.TRACK = pygame.image.load(f"car_game/imgs/{track_file}")

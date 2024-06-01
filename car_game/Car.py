@@ -7,6 +7,7 @@ from car_game import globals
 from car_game.utils import scale_image, blit_rotate_center
 
 
+# Contém os métodos gerais para movimentação de carros.
 class AbstractCar:
     def __init__(self, x, y):
         self.img = scale_image(self.IMG, globals.CAR_SIZE)

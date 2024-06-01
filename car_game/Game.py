@@ -6,6 +6,8 @@ from pygame.locals import *
 from car_game import globals
 from car_game.exceptions import InterruptException
 
+
+# Classe para gerenciamento do jogo.
 class Game:
     def __init__(self, mode):
         self.mode = mode
