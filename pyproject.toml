@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.12"
 pygame = "^2.5.2"
 neat-python = "^0.92"
+prompt-toolkit = "^3.0.45"
 
 
 [build-system]

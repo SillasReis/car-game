@@ -1,26 +1,76 @@
+from enum import Enum
+
+from prompt_toolkit import prompt
+from prompt_toolkit.shortcuts import button_dialog, radiolist_dialog
+
+from car_game import globals
 from car_game.run_ai import play
+from car_game.Track import tracks
 from car_game.train_ai import train_ai
+from car_game.utils import get_files_with_prefix
 
 
-# TODO: Fazer menu com opções para: treinar e jogar. (PODE SER no CLI mesmo)
-####### No caso de jogar, possibilitar escolha de modelo treinado e pista.
+class GameMode(Enum):
+    TRAINING = "Treinamento"
+    PLAYING = "Execução"
+
+
+def mode_selection():
+    result = radiolist_dialog(
+        title="AI Car",
+        text="Escolha o modo:",
+        values=[(game_mode, game_mode.value) for game_mode in GameMode],
+        cancel_text="Close"
+    ).run()
+
+    return result
+
+
+def track_selection():
+    result = radiolist_dialog(
+        title="AI Car",
+        text="Escolha a pista:",
+        values=[(track, track.name) for track in tracks]
+    ).run()
+
+    return result
+
+
+def model_selection():
+    models = [
+        model.split("/")[-1]
+        for model in get_files_with_prefix(globals.MODELS_PATH, "neat_model_")
+    ]
+
+    result = radiolist_dialog(
+        title="AI Car",
+        text="Escolha o modelo para execução:",
+        values=[(model, model.replace(".pkl", "")) for model in models]
+    ).run()
+
+    return result
+
 
 if __name__ == "__main__":
-    # Track 1
-    # track_file = "track-1.png"
-    # car_size = 0.5
-    # start_pos = (600, 70)
+    while True:
+        mode = mode_selection()
+        if not mode:
+            break
+        
+        track = track_selection()
+        if not track:
+            continue
 
-    # Track 2
-    # track_file = "track-2.png"
-    # car_size = 0.5
-    # start_pos = (700, 70)
+        match (mode):
+            case GameMode.TRAINING:
+                globals.show_display()
+                train_ai(track.track_file, track.car_size, track.start_pos)
+                globals.hide_display()
+            case GameMode.PLAYING:
+                model = model_selection()
+                if not model:
+                    continue
 
-    # Track 3
-    track_file = "track-3.png"
-    car_size = 0.5
-    start_pos = (500, 260)
-
-    # train_ai(track_file, car_size, start_pos)
-    play(track_file, car_size, start_pos, "neat_model_1715825448.9561605.pkl")
-
+                globals.show_display()
+                play(track.track_file, track.car_size, track.start_pos, model)
+                globals.hide_display()

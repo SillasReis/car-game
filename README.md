@@ -30,3 +30,4 @@ Exemplos de pistas podem ser encontrados na pasta destino. Um modelo de pista fe
 
 * [Neat Python](https://neat-python.readthedocs.io/en/latest/)
 * [PyGame](https://www.pygame.org/news)
+* [Python Prompt Toolkit](https://python-prompt-toolkit.readthedocs.io/en/master/index.html)
